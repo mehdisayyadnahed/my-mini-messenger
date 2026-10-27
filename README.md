@@ -247,6 +247,6 @@ PHP_CLI_SERVER_WORKERS=6 php -S 0.0.0.0:8080 index.php
 
 ## 👨‍💻 Author & Contributing
 
-- **Developed & Maintained by:** [Mehdi Sayyadnahed](https://mehdisayyadnahed.ir)
+- **Developed & Maintained by:** [Mehdi SayyadNahed](https://mehdisayyadnahed.ir)
 - **Developed with the assistance of Artificial Intelligence (AI)**
 - **Contributions, Issues & Feature Requests:** Welcome at [github.com/mehdisayyadnahed/my-mini-messenger](https://github.com/mehdisayyadnahed/my-mini-messenger)
