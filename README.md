@@ -12,7 +12,7 @@
 
 [**🇮🇷 مستندات فارسی**](#-معرفی-پیامرسان-کوچک-من-m3) • [**🇬🇧 English Documentation**](#-english-documentation) • [**📦 مخزن گیت‌هاب / GitHub**](https://github.com/mehdisayyadnahed/my-mini-messenger)
 
-  <img src="/images/Screenshot_1.png" alt="Universal File Server Screenshot 1" width="720" />
+  <img src="/images/Screenshot_1.png" alt="Universal File Server Screenshot 1" width="725" />
   <img src="/images/Screenshot_2.png" alt="Universal File Server Screenshot 2" width="230" />
 
 </div>
