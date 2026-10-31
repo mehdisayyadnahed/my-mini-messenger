@@ -25088,6 +25088,7 @@ const I18N = {
         marked_read_toast: 'پیام‌ها به عنوان خوانده‌شده علامت‌گذاری شدند.',
         all_already_read_toast: 'همه پیام‌ها قبلاً خوانده شده‌اند.',
         delete_conv_btn: '🗑️ حذف کامل گفتگو',
+        del_secret_both_btn: '🗑️ حذف دوطرفه گفتگو',
         clear_saved_btn: '🧹 پاکسازی پیام‌های ذخیره‌شده',
         ask_delete_conv: 'آیا از حذف کامل این گفتگو و تمام پیام‌ها و فایل‌های آن اطمینان دارید؟',
         del_dm_for_me_btn: '🚪 حذف فقط برای من',
@@ -26846,6 +26847,7 @@ const I18N = {
         marked_read_toast: 'Messages marked as read.',
         all_already_read_toast: 'All messages are already read.',
         delete_conv_btn: '🗑️ Delete Conversation',
+        del_secret_both_btn: '🗑️ Delete Chat for Both',
         clear_saved_btn: '🧹 Clear Saved Messages',
         ask_delete_conv: 'Permanently delete this conversation and all of its messages and files?',
         del_dm_for_me_btn: '🚪 Delete for me only',
@@ -33132,8 +33134,10 @@ function openChatContextMenu(chat, clientX, clientY) {
     // 3. Mute / Unmute Notifications (all chats, channels, groups)
     addItem(chat.muted === 1 ? t('unmute_notif_btn') : t('mute_notif_btn'), () => toggleChatNotifMute(chat));
 
-    // 4. Last-message preview: every member may hide it for themselves.
-    addItem(t('chat_preview_lbl') + ' — ' + ((chat.preview_hidden === 1) ? t('feature_off_badge') : t('feature_on_badge')), () => toggleChatFeature(chat, 'chat_preview', 'me'));
+    // 4. Last-message preview: every member may hide it for themselves. The eye
+    // in front carries the current state, so the row needs no "on/off" text.
+    addItem((chat.preview_hidden === 1 ? '🙈 ' : '👁️ ') + t('chat_preview_lbl'),
+            () => toggleChatFeature(chat, 'chat_preview', 'me'));
 
     // 5. Open Chat Info & Sent Files in this Chat
     addItem('ℹ️ ' + t('tip_chat_info'), async () => {
@@ -33144,7 +33148,28 @@ function openChatContextMenu(chat, clientX, clientY) {
         addItem('📂 ' + t('chat_sent_files_btn'), () => openMyUploadedFilesModal(chat.id));
     }
 
-    // 5. Leave Group / Channel (never allowed for Official System Chat)
+    // 6. Block / Unblock the other person. Blocking a chat used to mean a detour
+    // through Settings, which is a long way to go when the conversation you want
+    // to block is the one right under the pointer.
+    const peerId = Number(chat.peer && chat.peer.id);
+    const peerIsSelf = !!(store.user && peerId === Number(store.user.id));
+    if ((chat.type === 'dm' || chat.type === 'secret') && peerId > 0 && !peerIsSelf) {
+        const isBlocked = Array.isArray(store.blockedIds) && store.blockedIds.includes(peerId);
+        addItem(isBlocked ? t('unblock_user_btn') : t('block_user_btn'), async () => {
+            const r = await apiCall(isBlocked ? 'unblock_user' : 'block_user', { user_id: peerId });
+            if (!r.ok) { toast(r.message || t('err_generic'), true); return; }
+            if (r.data && Array.isArray(r.data.blocked_ids)) store.blockedIds = r.data.blocked_ids;
+            toast(t(isBlocked ? 'unblocked_toast' : 'blocked_toast'));
+            const cRes = await apiCall('chats_list');
+            if (cRes.ok && cRes.data) {
+                store.chats = cRes.data.chats;
+                renderChatList();
+                renderActiveChatHeader();
+            }
+        }, !isBlocked);
+    }
+
+    // 7. Leave Group / Channel (never allowed for Official System Chat)
     if (chat.type !== 'system' && (chat.type === 'group' || chat.type === 'channel') && chat.can_leave) {
         addItem(t('leave_chat_btn'), () => leaveOrDeleteChatAction(chat, 'leave'), true);
     }
@@ -33153,7 +33178,11 @@ function openChatContextMenu(chat, clientX, clientY) {
     const isSuper = store.user && store.user.role === 'superadmin';
     const isOwner = store.user && chat.owner_id === store.user.id;
     if (chat.type === 'dm' || chat.type === 'secret') {
-        addItem(t('delete_conv_btn'), () => leaveOrDeleteChatAction(chat, 'delete'), true);
+        // A secret chat cannot be erased for one side only; it is destroyed for
+        // both by design. Its menu entry says so outright instead of borrowing
+        // the generic "delete conversation" wording.
+        addItem(chat.type === 'secret' ? t('del_secret_both_btn') : t('delete_conv_btn'),
+                () => leaveOrDeleteChatAction(chat, 'delete'), true);
         if (chat.type === 'dm') {
             addItem(t('del_dm_for_me_btn'), () => deleteDmForMeAction(chat, formatChatTitle(chat)), true);
         }
