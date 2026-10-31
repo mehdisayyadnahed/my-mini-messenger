@@ -10,7 +10,7 @@
 [![Zero Dependencies](https://img.shields.io/badge/Dependencies-Zero%20%28Single%20index.php%29-10b981)](#)
 [![Offline & LAN Ready](https://img.shields.io/badge/Network-Internet%20%26%20Isolated%20LAN-0ea5e9)](#)
 
-[**🇮🇷 مستندات فارسی**](#-معرفی-پیامرسان-کوچک-من-m3) • [**🇬🇧 English Documentation**](#-english-documentation) • [**📦 مخزن گیت‌هاب / GitHub**](https://github.com/mehdisayyadnahed/my-mini-messenger)
+[**🇮🇷 مستندات فارسی**](#-معرفی-پیامرسان-کوچک-من-m3) • [**🇬🇧 English Documentation**](#-english-documentation)
 
   <img src="/images/Screenshot_2.png" alt="Universal File Server Screenshot 2" width="200" />
   <img src="/images/Screenshot_1.png" alt="Universal File Server Screenshot 1" width="630" />
