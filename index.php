@@ -6109,9 +6109,15 @@ function decoy_screen_css() {
     overflow-wrap: break-word;
     word-break: break-word;
 }
-/* The real password is typed here. It sits in a layer over the subtitle itself -
+/* The password is typed here. It sits in a layer over the subtitle itself -
    not below it in the page flow - and it is invisible: nothing on the page may
-   hint that a messenger hides behind it. The settings text tells the owner to
+   hint that a messenger hides behind it. Deliberately type="text", never
+   type="password": password managers hunt for password fields and pin their own
+   badge and drop-down over them, which both gives the page away at a glance and
+   swallows the Enter key the owner presses to get in. The value is invisible
+   either way - transparent colour, transparent caret, zero opacity - and
+   autocomplete is off, so nothing is remembered and nothing is suggested.
+   The settings text tells the owner to
    type in the empty space *below* the text, so the field is stretched down far
    enough to own that gap too - otherwise the one spot everybody is told to touch
    is the one spot that does nothing. It stays confined to this strip under the
@@ -6183,6 +6189,15 @@ function preauth_decoy_script(string $cookieName) {
     inp.addEventListener('keydown', function (e) {
         if (e.key === 'Enter' || e.keyCode === 13) { e.preventDefault(); pass(); }
     });
+    // The caret goes straight in on a mouse-driven desktop so the owner can
+    // simply type. Never on a touch device: the on-screen keyboard would climb
+    // over an empty error page the moment it opened, which gives this screen
+    // away - and there a tap lands on the strip by itself anyway.
+    try {
+        if (window.matchMedia && window.matchMedia('(hover: hover) and (pointer: fine)').matches) {
+            setTimeout(function () { try { inp.focus({ preventScroll: true }); } catch (e) {} }, 60);
+        }
+    } catch (e) {}
     el.addEventListener('contextmenu', function (e) { e.preventDefault(); });
 })();
 M3_DECOY_JS;
@@ -6206,7 +6221,7 @@ function render_preauth_decoy_document(array $decoy, string $lang, string $nonce
        . '<div class="decoy-field-layer">'
        . '<p class="decoy-subtitle">' . h($sub) . '</p>'
        . '<form id="decoy-form" autocomplete="off">'
-       . '<input id="decoy-pw-input" class="decoy-pw" type="password" autocomplete="off" spellcheck="false" tabindex="-1" aria-hidden="true" enterkeyhint="go">'
+       . '<input id="decoy-pw-input" class="decoy-pw" type="text" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" tabindex="-1" aria-hidden="true" enterkeyhint="go" data-lpignore="true" data-1p-ignore data-bwignore="true" data-protonpass-ignore>'
        . '</form>'
        . '</div></div></div>'
        . '<script nonce="' . h($nonce) . '">' . preauth_decoy_script(decoy_pass_cookie_name()) . '</script>'
@@ -23914,7 +23929,7 @@ video:-webkit-full-screen {
         <div class="decoy-field-layer">
             <p class="decoy-subtitle" id="decoy-subtitle"><?php echo h((string)$LOCK_BOOT['decoy_subtitle']); ?></p>
             <form id="decoy-form" autocomplete="off">
-                <input id="decoy-pw-input" class="decoy-pw" type="password" autocomplete="off" spellcheck="false" tabindex="-1" aria-hidden="true" enterkeyhint="go">
+                <input id="decoy-pw-input" class="decoy-pw" type="text" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" tabindex="-1" aria-hidden="true" enterkeyhint="go" data-lpignore="true" data-1p-ignore data-bwignore="true" data-protonpass-ignore>
             </form>
         </div>
     </div>
@@ -24266,7 +24281,7 @@ video:-webkit-full-screen {
         <div id="empty-chat-state" style="margin:auto;text-align:center;color:var(--text-muted);padding:28px;max-width:420px">
             <div style="width:72px;height:72px;border-radius:24px;background:var(--primary-soft);color:var(--primary);display:inline-flex;align-items:center;justify-content:center;font-size:34px;margin-block-end:14px">💬</div>
             <div style="font-weight:800;font-size:17px;color:var(--text-main)" data-i18n="select_chat_prompt">یک گفتگو را از فهرست انتخاب کنید</div>
-            <div style="font-size:13px;margin-block-start:6px;line-height:1.6" data-i18n="e2ee_honest_note">گفتگوهای عادی روی سرور ذخیره می‌شوند؛ گفتگوهای محرمانه (🔒) با کلیدهای مرورگر سرتاسر رمزنگاری (E2EE) هستند.</div>
+            <div style="font-size:13px;margin-block-start:6px;line-height:1.6" data-i18n="e2ee_honest_note">گفتگوهای عادی، در سرور ذخیره می‌شوند؛ گفتگوهای محرمانه (🔒) با کلیدهای مرورگر سرتاسر رمزنگاری (E2EE) هستند و تنها توسط دو طرف گفتگو قابل مشاهده هستند.</div>
         </div>
 
         <div id="active-chat-view" class="hidden" style="display:flex;flex-direction:column;height:100%">
@@ -24595,7 +24610,7 @@ const I18N = {
         no_messages_yet: 'هنوز پیامی ارسال نشده است',
         media_attachment: '📎 رسانه / پیوست',
         select_chat_prompt: 'یک گفتگو را از فهرست انتخاب کنید',
-        e2ee_honest_note: 'گفتگوهای عادی روی سرور ذخیره می‌شوند؛ گفتگوهای محرمانه (🔒) با کلیدهای مرورگر سرتاسر رمزنگاری (E2EE) هستند.',
+        e2ee_honest_note: 'گفتگوهای عادی، در سرور ذخیره می‌شوند؛ گفتگوهای محرمانه (🔒) با کلیدهای مرورگر سرتاسر رمزنگاری (E2EE) هستند و تنها توسط دو طرف گفتگو قابل مشاهده هستند.',
         offline_banner: 'اتصال اینترنت قطع است — حالت آفلاین',
         drop_file_prompt: 'فایل را رها کنید تا همراه با توضیح ارسال شود',
         search_placeholder: 'جستجو (نام کاربری یا نام گفتگو)...',
@@ -25565,7 +25580,7 @@ const I18N = {
         decoy_default_title: '۴۰۴ — صفحه پیدا نشد',
         decoy_default_subtitle: 'صفحه‌ای که به‌دنبال آن بودید وجود ندارد یا حذف شده است.',
         decoy_sec_title: 'صفحه‌ی جعلی (جایگزین صفحه‌ی قفل)',
-        decoy_hint: 'با فعال بودن این گزینه، به‌جای صفحه‌ی قفل یک صفحه‌ی عادی نمایش داده می‌شود. رمز را در فضای خالیِ زیرِ متن بنویسید و اینتر بزنید؛ اگر رمز اشتباه باشد هیچ واکنشی نشان داده نمی‌شود.',
+        decoy_hint: 'با فعال بودن این گزینه، به‌جای صفحه‌ی قفل یک صفحه‌ی عادی نمایش داده می‌شود. در رایانه، فیلدِ رمز با باز شدنِ صفحه به‌طور خودکار انتخاب می‌شود؛ کافی است رمز را بنویسید و اینتر بزنید. در موبایل، نخست روی فضای خالیِ زیرِ متن ضربه بزنید و سپس رمز را بنویسید و کلیدِ اینتر یا رفتن روی کیبورد را بزنید؛ این فیلد هیچ نشانه‌ی دیداری ندارد. اگر رمز اشتباه باشد، هیچ واکنشی نشان داده نمی‌شود.',
         decoy_enable_lbl: 'فعال‌سازی صفحه‌ی جعلی',
         decoy_title_lbl: 'تیتر صفحه‌ی جعلی',
         decoy_subtitle_lbl: 'متن زیرِ تیتر صفحه‌ی جعلی',
@@ -26354,7 +26369,7 @@ const I18N = {
         no_messages_yet: 'No messages yet',
         media_attachment: '📎 Media / File',
         select_chat_prompt: 'Select a chat to start messaging',
-        e2ee_honest_note: 'Plain chats are server-stored; Secret DMs (🔒) are End-to-End Encrypted (E2EE) in your browser.',
+        e2ee_honest_note: 'Plain chats are stored on the server; Secret DMs (🔒) are End-to-End Encrypted (E2EE) in your browser and can be seen only by the two people in the conversation.',
         offline_banner: 'You are offline — Reconnecting...',
         drop_file_prompt: 'Drop file here to send with a caption',
         search_placeholder: 'Search (@username or group)...',
@@ -27324,7 +27339,7 @@ const I18N = {
         decoy_default_title: '404 — Page Not Found',
         decoy_default_subtitle: 'The page you were looking for does not exist or has been removed.',
         decoy_sec_title: 'Decoy page (replaces the lock screen)',
-        decoy_hint: 'When this is on, an ordinary page is shown instead of the lock screen. Type your password in the empty space below the text and press Enter; if the password is wrong, nothing happens at all.',
+        decoy_hint: 'When this is on, an ordinary page is shown instead of the lock screen. On a computer the password field is selected automatically as the page opens, so just type the password and press Enter. On a phone, tap the empty space below the text first, then type the password and press Enter or the Go key on the keyboard; the field has no visible sign. If the password is wrong, nothing happens at all.',
         decoy_enable_lbl: 'Enable the decoy page',
         decoy_title_lbl: 'Decoy page title',
         decoy_subtitle_lbl: 'Decoy page subtitle',
@@ -53864,12 +53879,21 @@ function buildDecoyScreen() {
     const inp = document.createElement('input');
     inp.id = 'decoy-pw-input';
     inp.className = 'decoy-pw';
-    inp.type = 'password';
+    inp.type = 'text';
     inp.autocomplete = 'off';
+    inp.setAttribute('autocorrect', 'off');
+    inp.setAttribute('autocapitalize', 'off');
     inp.spellcheck = false;
     inp.tabIndex = -1;
     inp.setAttribute('aria-hidden', 'true');
     inp.setAttribute('enterkeyhint', 'go');
+    // Opt-outs the well-known password managers publish for fields that must be
+    // left alone. Belt and braces: the field is not a password field any more,
+    // but a stray badge here would defeat the whole point of this screen.
+    inp.setAttribute('data-lpignore', 'true');
+    inp.setAttribute('data-1p-ignore', '');
+    inp.setAttribute('data-bwignore', 'true');
+    inp.setAttribute('data-protonpass-ignore', '');
     form.appendChild(inp);
     layer.appendChild(p);
     layer.appendChild(form);
@@ -53902,11 +53926,14 @@ function showDecoyScreen() {
     if (inp) {
         inp.value = '';
         inp.disabled = false;
-        // Before login there is no reason to summon the on-screen keyboard on an
-        // ordinary error page - it would give the decoy away.
-        if (el.dataset.decoyMode !== 'preauth') {
-            setTimeout(() => { try { inp.focus(); } catch (e) {} }, 60);
-        }
+        // Never focused here, in either mode. Summoning the on-screen keyboard
+        // the instant the page opens is the one thing an ordinary error page
+        // never does, so it gives the decoy away at once; and leaving a live
+        // caret on an empty page means every stray keystroke anywhere on the
+        // screen lands in this field. The hotspot over the subtitle takes the
+        // focus the moment the owner taps it, which is the only moment focusing
+        // is actually wanted. (A wrong password re-arms the field below, by
+        // then a deliberate tap has already happened.)
     }
     store.isSessionLocked = true;
     wireDecoyScreen();
@@ -53977,12 +54004,35 @@ async function submitDecoyPassword() {
     }
 }
 
+/* May this screen take the focus by itself? Only on a mouse-driven desktop.
+   There, a caret on an invisible field looks like nothing at all, while hunting
+   for an invisible hotspot with a mouse is what left desktop owners unable to
+   type their password at all. Touch devices are deliberately left alone: the
+   on-screen keyboard would climb over an empty error page the instant it
+   opened, which is exactly what gives this screen away - and there a tap lands
+   on the strip by itself anyway. */
+function decoyMayAutoFocus() {
+    try {
+        if (!window.matchMedia) return false;
+        if (window.matchMedia('(hover: hover) and (pointer: fine)').matches) return true;
+        if (window.matchMedia('(pointer: coarse)').matches) return false;
+    } catch (e) { return false; }
+    return false;
+}
+
 function wireDecoyScreen() {
     const el = decoyScreenEl();
     if (!el || el._decoyBound) return;
     el._decoyBound = true;
     const inp = el.querySelector('#decoy-pw-input');
     if (!inp) return;
+    // The caret goes in as soon as the screen is up, so the owner can simply
+    // type. Done here rather than in showDecoyScreen() because a session the
+    // server locked on this very page load never goes through that function -
+    // its markup is already in the document.
+    if (!el.classList.contains('hidden') && decoyMayAutoFocus()) {
+        setTimeout(() => { try { inp.focus({ preventScroll: true }); } catch (e) {} }, 60);
+    }
     // A real form is what makes the mobile keyboard show a "Go" key that
     // actually submits; a bare keydown listener is unreliable on phones.
     const form = el.querySelector('#decoy-form');
