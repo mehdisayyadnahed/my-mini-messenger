@@ -1160,6 +1160,7 @@ function default_settings_map() {
         'global_hide_edit_badge' => 0,
         'force_lock_screen'      => 0,
         'force_decoy_screen'     => 0,
+        'auto_notif_permission_prompt' => 1,
         'global_decoy_title'     => '',
         'global_decoy_subtitle'  => '',
         'max_file_mb'     => 16,
@@ -8328,6 +8329,7 @@ function handle_api_route(DB $db) {
             'global_hide_edit_badge'           => (int)Settings::get($db, 'global_hide_edit_badge', 0) ? 1 : 0,
             'force_lock_screen'                => (int)Settings::get($db, 'force_lock_screen', 0) ? 1 : 0,
             'force_decoy_screen'               => (int)Settings::get($db, 'force_decoy_screen', 0) ? 1 : 0,
+            'auto_notif_permission_prompt'     => (int)Settings::get($db, 'auto_notif_permission_prompt', 1) ? 1 : 0,
             'global_decoy_title'               => (string)Settings::get($db, 'global_decoy_title', ''),
             'global_decoy_subtitle'            => (string)Settings::get($db, 'global_decoy_subtitle', ''),
             'vapid_public_key'                 => ensure_vapid_keys($db)['public_key']
@@ -18578,11 +18580,11 @@ html[dir="rtl"] #btn-back-list svg {
     text-align: center;
     cursor: pointer;
     user-select: none;
-    transition: transform 0.16s ease, border-color 0.16s ease, background 0.16s ease;
+    transition: border-color 0.16s ease, background 0.16s ease;
 }
 .media-spoiler-cover:hover {
-    transform: scale(1.015);
-    border-color: var(--primary-hover);
+    border-color: var(--primary);
+    background: var(--primary-soft);
 }
 .media-spoiler-emojis {
     font-size: 34px;
@@ -25592,6 +25594,8 @@ const I18N = {
         decoy_scope_global_lbl: 'در حال حاضر تنظیمات سراسریِ مدیر کل بر این بخش اعمال می‌شود. با فعال کردن قفل صفحه برای خودتان، اولویت با تنظیمات شما خواهد بود.',
         adm_decoy_sec_title: 'صفحه‌ی جعلی و قفل اجباریِ سراسری',
         adm_force_lock_lbl: 'اجبار قفل صفحه برای همه‌ی کاربران',
+        adm_auto_notif_prompt_lbl: 'درخواست خودکارِ فعال‌سازی اعلانِ مرورگر هنگام ورود',
+        adm_auto_notif_prompt_hint: 'با فعال بودن، هنگام ورودِ هر کاربر بررسی می‌شود که آیا اجازه‌ی اعلانِ مرورگر داده شده است یا نه؛ اگر نداده باشد، همان پنجره‌ی خودِ مرورگر با نخستین کلیکِ او نمایش داده می‌شود. کاربران همچنان هر زمان بخواهند می‌توانند با زنگوله‌ی بالای فهرستِ گفتگوها همین کار را بکنند.',
         adm_force_decoy_lbl: 'اجبار صفحه‌ی جعلی برای همه‌ی کاربران',
         adm_lock_decoy_exclusive: 'قفل صفحه و صفحه‌ی جعلی نمی‌توانند هم‌زمان برای همه اجرا شوند. یکی را خاموش کنید.',
         adm_global_decoy_title_lbl: 'تیتر سراسری صفحه‌ی جعلی',
@@ -27351,6 +27355,8 @@ const I18N = {
         decoy_scope_global_lbl: 'The super-admin\'s global settings currently govern this section. Enabling your own lock screen gives your settings priority.',
         adm_decoy_sec_title: 'Decoy page and global forced lock',
         adm_force_lock_lbl: 'Force the lock screen for all users',
+        adm_auto_notif_prompt_lbl: 'Ask for browser notification permission automatically at sign-in',
+        adm_auto_notif_prompt_hint: 'When on, each sign-in checks whether browser notification permission has been granted; if it has not, the browser\u2019s own prompt appears on the person\u2019s first click. People can still do the same at any time with the bell above the chat list.',
         adm_force_decoy_lbl: 'Force the decoy page for all users',
         adm_lock_decoy_exclusive: 'The lock screen and the decoy page cannot both be enforced for everybody. Turn one of them off.',
         adm_global_decoy_title_lbl: 'Global decoy page title',
@@ -31293,6 +31299,14 @@ const E2EE = {
             const ivBytes = Uint8Array.from(atob(fileObj.file_iv), c => c.charCodeAt(0));
             const plainBuf = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: ivBytes }, key, cipherBuf);
             let outMime = mimeHint || '';
+            // The server stores the real MIME type when the file is uploaded, so
+            // trust it first. Guessing from the extension gets a .webm wrong half
+            // the time - a WebM is video far more often than it is audio - and a
+            // file handed to the browser with the wrong type simply will not play.
+            if (!outMime) {
+                const storedMime = String(fileObj.mime || '').trim().toLowerCase();
+                if (storedMime && storedMime !== 'application/octet-stream') outMime = storedMime;
+            }
             if (!outMime) {
                 const fn = String(fileObj.display_name || '').toLowerCase();
                 if (/\.(png)$/i.test(fn)) outMime = 'image/png';
@@ -36287,6 +36301,20 @@ async function renderMessagesViewport(scrollToBottom = false, renderOpts = {}) {
     const forcePinBottom = Boolean(scrollToBottom || (store._forcePinBottomUntil && Date.now() < store._forcePinBottomUntil));
 
     const list = store.messages[chat.id] || [];
+    // Every secret body is decrypted up front, all at once. Doing it inside the
+    // row loop below cost one serial await per message, so opening a secret chat
+    // - and again when the fresh copy arrived - crawled through the history.
+    const plainByMsgId = new Map();
+    if (chat.type === 'secret') {
+        const pending = list.filter(m => m && m.cipher && m.iv);
+        if (pending.length) {
+            const settled = await Promise.all(pending.map(async m => {
+                try { return [m.id, await E2EE.decryptText(chat, m.cipher, m.iv)]; }
+                catch (e) { return [m.id, '']; }
+            }));
+            for (const pair of settled) plainByMsgId.set(pair[0], pair[1]);
+        }
+    }
     const frag = document.createDocumentFragment();
 
     let lastDateStr = '';
@@ -36422,7 +36450,9 @@ async function renderMessagesViewport(scrollToBottom = false, renderOpts = {}) {
 
         let displayBody = msg.body || '';
         if (chat.type === 'secret' && msg.cipher && msg.iv) {
-            displayBody = await E2EE.decryptText(chat, msg.cipher, msg.iv);
+            displayBody = plainByMsgId.has(msg.id)
+                ? plainByMsgId.get(msg.id)
+                : await E2EE.decryptText(chat, msg.cipher, msg.iv);
         }
         if (msg.kind === 'call_log') {
             let clData = {};
@@ -49666,6 +49696,7 @@ function openAdminPanelModal(initialTab = 'dashboard') {
                 const tVideoNote = makeToggleCard(t('adm_video_note_enabled'), Number(curSettings.video_note_enabled ?? 1) === 1);
                 const tE2ee = makeToggleCard(t('adm_e2ee_enabled'), Number(curSettings.e2ee_enabled ?? 1) === 1);
                 const tGlobalHideEdit = makeToggleCard(t('adm_global_hide_edit_badge_lbl'), Number(curSettings.global_hide_edit_badge ?? 0) === 1);
+                const tAutoNotifPrompt = makeToggleCard(t('adm_auto_notif_prompt_lbl'), Number(curSettings.auto_notif_permission_prompt ?? 1) !== 0);
                 tGlobalHideEdit.input.id = 'adm-global-hide-edit-badge';
                 // Layered global switches: the master switch, then the per-type
                 // switches. Chat admins and members can still switch a feature off
@@ -49680,6 +49711,11 @@ function openAdminPanelModal(initialTab = 'dashboard') {
                 msgCard.appendChild(tVideoNote.wrap);
                 msgCard.appendChild(tE2ee.wrap);
                 msgCard.appendChild(tGlobalHideEdit.wrap);
+                msgCard.appendChild(tAutoNotifPrompt.wrap);
+                const autoNotifHint = document.createElement('p');
+                autoNotifHint.style.cssText = 'font-size:11px;color:var(--text-muted);margin:0 0 8px;line-height:1.6';
+                autoNotifHint.textContent = t('adm_auto_notif_prompt_hint');
+                msgCard.appendChild(autoNotifHint);
 
                 // The six master switches are site-wide, so they belong to the
                 // founder. Super-admins get the per-chat layer below instead, and
@@ -50405,6 +50441,7 @@ lbl.style.cssText = 'justify-content:flex-start;gap:10px;font-size:12.5px;font-w
                         chat_preview_enabled_channels: tPreviewChannels.input.checked ? 1 : 0,
                         e2ee_enabled: tE2ee.input.checked ? 1 : 0,
                         global_hide_edit_badge: tGlobalHideEdit.input.checked ? 1 : 0,
+                        auto_notif_permission_prompt: tAutoNotifPrompt.input.checked ? 1 : 0,
                         global_typing_policy: selGlobalTypingPol.value,
                         allow_copy_msg: tAllowCopy.input.checked ? 1 : 0,
                         allow_select_text: tAllowSelect.input.checked ? 1 : 0,
@@ -51068,6 +51105,34 @@ function urlBase64ToUint8Array(base64String) {
     const out = new Uint8Array(rawData.length);
     for (let i = 0; i < rawData.length; ++i) out[i] = rawData.charCodeAt(i);
     return out;
+}
+
+/* Ask for notification permission without making anybody hunt for the bell.
+   Armed on the person's first gesture rather than run at load: Firefox and
+   Safari silently refuse a permission request raised outside a user event, so
+   firing it straight away would look like the feature simply did not work.
+   One shot per session, and never at all once the browser has been answered.
+   The bell above the chat list is untouched - it still does exactly what it
+   always did whenever somebody wants to do this by hand. */
+function armAutoNotificationPermissionPrompt() {
+    if (!('Notification' in window)) return;
+    if (Notification.permission !== 'default') return;
+    if (store._autoNotifPromptArmed) return;
+    if (store.settings && Number(store.settings.auto_notif_permission_prompt) === 0) return;
+    store._autoNotifPromptArmed = true;
+    const cleanup = () => {
+        window.removeEventListener('pointerdown', ask, true);
+        window.removeEventListener('keydown', ask, true);
+    };
+    const ask = async () => {
+        cleanup();
+        try {
+            await Notification.requestPermission();
+            if (typeof syncNotifMasterBtn === 'function') syncNotifMasterBtn();
+        } catch (e) {}
+    };
+    window.addEventListener('pointerdown', ask, true);
+    window.addEventListener('keydown', ask, true);
 }
 
 async function syncBackgroundServiceWorkerAndPush(forceEnable = null) {
@@ -52061,6 +52126,7 @@ async function bootApp(bootOpts = {}) {
         }, 15000);
     }
     syncBackgroundServiceWorkerAndPush();
+    armAutoNotificationPermissionPrompt();
     try {
         const uParams = new URLSearchParams(window.location.search || '');
         const openCid = parseInt(uParams.get('open_chat') || '0', 10);
