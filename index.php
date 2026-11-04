@@ -6187,18 +6187,34 @@ function preauth_decoy_script(string $cookieName) {
         location.replace('./');
     }
     if (form) form.addEventListener('submit', function (e) { e.preventDefault(); pass(); });
-    inp.addEventListener('keydown', function (e) {
+    // Enter is listened for on the whole document, not on the field. The field
+    // is invisible, so its caret is invisible too: the moment somebody clicks
+    // anywhere on this page - pure reflex on a computer, and there is nothing
+    // on screen saying a field is even there - the caret leaves the input and
+    // a listener bound to the input would swallow the key in silence. Binding
+    // to the document means the gesture survives wherever the caret happens to
+    // be, on a phone as much as on a computer. The autofocus below is then a
+    // convenience for typing, not the mechanism that carries the Enter key.
+    document.addEventListener('keydown', function (e) {
         if (e.key === 'Enter' || e.keyCode === 13) { e.preventDefault(); pass(); }
     });
-    // The caret goes straight in on a mouse-driven desktop so the owner can
-    // simply type. Never on a touch device: the on-screen keyboard would climb
-    // over an empty error page the moment it opened, which gives this screen
-    // away - and there a tap lands on the strip by itself anyway.
+    // The caret goes straight in so the owner can simply type. Only a touch-only
+    // device is left alone: there the on-screen keyboard would climb over an empty
+    // error page the moment it opened, which gives this screen away - and there a
+    // tap lands on the strip by itself anyway. Deliberately phrased as "skip only
+    // when there is a coarse pointer and no fine one" rather than "require hover
+    // and a fine pointer": asking for the positive case means any browser that
+    // answers differently - or not at all - silently gets no focus, and the owner
+    // is left typing into a page that shows nothing.
+    var touchOnly = false;
     try {
-        if (window.matchMedia && window.matchMedia('(hover: hover) and (pointer: fine)').matches) {
-            setTimeout(function () { try { inp.focus({ preventScroll: true }); } catch (e) {} }, 60);
-        }
+        if (window.matchMedia
+            && window.matchMedia('(pointer: coarse)').matches
+            && !window.matchMedia('(pointer: fine)').matches) touchOnly = true;
     } catch (e) {}
+    if (!touchOnly) {
+        setTimeout(function () { try { inp.focus({ preventScroll: true }); } catch (e) {} }, 60);
+    }
     el.addEventListener('contextmenu', function (e) { e.preventDefault(); });
 })();
 M3_DECOY_JS;
@@ -54121,11 +54137,15 @@ async function submitDecoyPassword() {
    on the strip by itself anyway. */
 function decoyMayAutoFocus() {
     try {
-        if (!window.matchMedia) return false;
-        if (window.matchMedia('(hover: hover) and (pointer: fine)').matches) return true;
-        if (window.matchMedia('(pointer: coarse)').matches) return false;
-    } catch (e) { return false; }
-    return false;
+        // Skip only a touch-only device. Asking for "(hover: hover) and
+        // (pointer: fine)" instead meant any browser that answers differently -
+        // or cannot answer - quietly lost the focus and left the owner typing
+        // into a page that shows nothing at all.
+        if (!window.matchMedia) return true;
+        if (window.matchMedia('(pointer: coarse)').matches
+            && !window.matchMedia('(pointer: fine)').matches) return false;
+    } catch (e) { return true; }
+    return true;
 }
 
 function wireDecoyScreen() {
