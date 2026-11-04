@@ -33177,7 +33177,22 @@ function openChatContextMenu(chat, clientX, clientY) {
         addItem('📂 ' + t('chat_sent_files_btn'), () => openMyUploadedFilesModal(chat.id));
     }
 
-    // 6. Block / Unblock the other person. Blocking a chat used to mean a detour
+    // 6. Start a Secret (E2EE) chat with this same person. Offered for a plain
+    // one-to-one chat only, and only while E2EE is switched on: going secret with
+    // somebody you already talk to should be one step from here, not a hunt.
+    if (chat.type === 'dm' && chat.peer && store.settings.e2ee_enabled) {
+        addItem(t('start_secret_btn'), async () => {
+            const r = await apiCall('chat_open_secret', { user_id: chat.peer.id });
+            if (r.ok) {
+                store.chats = r.data.chats;
+                await selectChat(r.data.chat_id);
+            } else {
+                toast(r.message || t('err_generic'), true);
+            }
+        });
+    }
+
+    // 7. Block / Unblock the other person. Blocking a chat used to mean a detour
     // through Settings, which is a long way to go when the conversation you want
     // to block is the one right under the pointer.
     const peerId = Number(chat.peer && chat.peer.id);
@@ -33198,7 +33213,7 @@ function openChatContextMenu(chat, clientX, clientY) {
         }, !isBlocked);
     }
 
-    // 7. Leave Group / Channel (never allowed for Official System Chat)
+    // 8. Leave Group / Channel (never allowed for Official System Chat)
     if (chat.type !== 'system' && (chat.type === 'group' || chat.type === 'channel') && chat.can_leave) {
         addItem(t('leave_chat_btn'), () => leaveOrDeleteChatAction(chat, 'leave'), true);
     }
@@ -39475,6 +39490,19 @@ async function openChatInfoModal(initialTab = 'overview') {
                     }
                 ));
             }
+        }
+
+        if (chat.type === 'dm' && chat.peer && store.settings.e2ee_enabled) {
+            quickGrid.appendChild(makeQuickTile(HDR_SVG.lock, t('start_secret_btn'), async () => {
+                close();
+                const r = await apiCall('chat_open_secret', { user_id: chat.peer.id });
+                if (r.ok) {
+                    store.chats = r.data.chats;
+                    await selectChat(r.data.chat_id);
+                } else {
+                    toast(r.message || t('err_generic'), true);
+                }
+            }));
         }
 
         if ((chat.type === 'dm' || chat.type === 'secret') && chat.peer) {
@@ -51996,7 +52024,21 @@ async function bootApp(bootOpts = {}) {
     window.addEventListener('offline', () => document.getElementById('offline-banner').classList.remove('hidden'));
 
     const res = await apiCall('bootstrap');
-    if (!res.ok) return;
+    if (!res.ok) {
+        // A failed bootstrap used to end in a blank document. The auth screen
+        // ships hidden, so a visitor who is not signed in was left with nothing
+        // at all - no sign-in, no registration, no way forward. For somebody who
+        // is not signed in the forms are the only sensible fallback, and they are
+        // also what carries the captcha and proof-of-work fields, so they are the
+        // one thing that can dig a visitor out of a firewall rejection instead of
+        // leaving them staring at an empty page.
+        if (!store.user) {
+            clearAllAuthFormsCompletely(true);
+            document.getElementById('auth-screen').classList.remove('hidden');
+            document.getElementById('messenger-shell').classList.add('hidden');
+        }
+        return;
+    }
 
     store.csrf = res.data.csrf_token || '';
     store.settings = res.data.settings || {};
@@ -53210,7 +53252,7 @@ function wireEvents() {
         if (emojiPop.children.length === 0) {
             ['😀','😂','😍','🥰','😎','🤔','😭','😡','👍','👎','❤️','🔥','🎉','👏','🙏','💯','🌹','✨','🚀','✅','⚡','💎','🤝','🎯'].forEach(em => {
                 const sp = document.createElement('span');
-                sp.className = 'emoji-cell';
+                sp.className = 'emoji-item';
                 sp.textContent = em;
                 sp.addEventListener('click', () => {
                     const ta = document.getElementById('composer-textarea');
